@@ -149,7 +149,7 @@ export default function({ node, parent, scope, id }) {
         scope.getBinding(id.name) === binding
       ) {
         // always going to reference this method
-        node.id = id;
+        node.id = t.identifier(id.loc.identifierName);
         node.id[t.NOT_LOCAL_BINDING] = true;
         return;
       }
