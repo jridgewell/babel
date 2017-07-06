@@ -109,9 +109,7 @@ helpers.asyncGenerator = template(`
           var result = gen[key](arg)
           var value = result.value;
           if (value instanceof AwaitValue) {
-            Promise.resolve(value.value).then(
-              function (arg) { resume("next", arg); },
-              function (arg) { resume("throw", arg); });
+            Promise.resolve(value.value).then(_next, _throw);
           } else {
             settle(result.done ? "return" : "normal", result.value);
           }
@@ -119,6 +117,9 @@ helpers.asyncGenerator = template(`
           settle("throw", err);
         }
       }
+
+      function _next(arg) { resume("next", arg) }
+      function _throw(arg) { resume("throw", arg) }
 
       function settle(type, value) {
         switch (type) {
@@ -163,7 +164,7 @@ helpers.asyncGenerator = template(`
           return new AsyncGenerator(fn.apply(this, arguments));
         };
       },
-      await: function (value) {
+      await: function awaitValue(value) {
         return new AwaitValue(value);
       }
     };
