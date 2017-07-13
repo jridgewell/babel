@@ -21,17 +21,25 @@ let _crawlCallsCount = 0;
  * node itself containing all scopes it has been associated with.
  */
 
-function getCache(path, parentScope, self) {
-  const scopes: Array<Scope> = scopeCache.get(path.node) || [];
+function getCache(path, parentScope) {
+  const { node } = path;
+  if (!scopeCache.has(node)) {
+    return;
+  }
+
+  const scopes: Array<Scope> = scopeCache.get(node);
 
   for (const scope of scopes) {
     if (scope.parent === parentScope && scope.path === path) return scope;
   }
+}
 
-  scopes.push(self);
-
-  if (!scopeCache.has(path.node)) {
-    scopeCache.set(path.node, scopes);
+function putCache(path, self) {
+  const { node } = path;
+  if (scopeCache.has(node)) {
+    scopeCache.get(node).push(self);
+  } else {
+    scopeCache.set(node, [self]);
   }
 }
 
@@ -178,13 +186,6 @@ export default class Scope {
    */
 
   constructor(path: NodePath, parentScope?: Scope) {
-    if (parentScope && parentScope.block === path.node) {
-      return parentScope;
-    }
-
-    const cached = getCache(path, parentScope, this);
-    if (cached) return cached;
-
     this.uid = uid++;
     this.parent = parentScope;
     this.hub = path.hub;
@@ -194,6 +195,19 @@ export default class Scope {
     this.path = path;
 
     this.labels = new Map();
+  }
+
+  static construct(path: NodePath, parentScope?: Scope) {
+    if (parentScope && parentScope.block === path.node) {
+      return parentScope;
+    }
+
+    const cached = getCache(path, parentScope);
+    if (cached) return cached;
+
+    const scope = new Scope(path, parentScope);
+    putCache(path, scope);
+    return scope;
   }
 
   /**
