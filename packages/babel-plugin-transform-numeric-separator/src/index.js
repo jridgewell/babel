@@ -2,10 +2,6 @@ import syntaxNumericSeparator from "babel-plugin-syntax-numeric-separator";
 
 export default function ({ types: t }) {
 
-  function replacer(value) {
-    return value.replace(/_/g, "");
-  }
-
   function replaceNumberArg({ node }) {
     if (node.callee.name !== "Number") {
       return;
@@ -14,23 +10,15 @@ export default function ({ types: t }) {
     if (!t.isStringLiteral(arg)) {
       return;
     }
-    arg.value = replacer(arg.value);
+    arg.value = arg.value.replace(/_/g, "");
   }
-
-  const CallExpression = replaceNumberArg;
-  const NewExpression = replaceNumberArg;
 
   return {
     inherits: syntaxNumericSeparator,
 
     visitor: {
-      CallExpression,
-      NewExpression,
-      NumericLiteral({ node }) {
-        if (node.extra && /_/.test(node.extra.raw)) {
-          node.value = replacer(node.extra.raw);
-        }
-      },
+      CallExpression: replaceNumberArg,
+      NewExpression: replaceNumberArg,
     },
   };
 }
