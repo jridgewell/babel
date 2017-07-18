@@ -64,7 +64,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "eslint --format=codeframe --fix"
+      "eslint --format=codeframe"
     ]
   }
 }
