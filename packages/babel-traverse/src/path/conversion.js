@@ -119,15 +119,16 @@ function hoistFunctionEnvironment(
   specCompliant = false,
   allowInsertArrow = true,
 ) {
-  const thisEnvFn = fnPath.findParent(
-    p =>
+  const thisEnvFn = fnPath.findParent(p => {
+    return (
       (p.isFunction() && !p.isArrowFunctionExpression()) ||
       p.isProgram() ||
-      p.isClassProperty(),
-  );
+      p.isClass()
+    );
+  });
   const inConstructor = thisEnvFn && thisEnvFn.node.kind === "constructor";
 
-  if (thisEnvFn.isClassProperty()) {
+  if (thisEnvFn.isClass()) {
     throw fnPath.buildCodeFrameError(
       "Unable to transform arrow inside class property",
     );
@@ -151,14 +152,8 @@ function hoistFunctionEnvironment(
 
     const allSuperCalls = [];
     thisEnvFn.traverse({
-      Function: child => {
-        if (
-          child.isArrowFunctionExpression() ||
-          child.isClassProperty() ||
-          child === fnPath
-        ) {
-          return;
-        }
+      Function(child) {
+        if (child.isArrowFunctionExpression() || child === fnPath) return;
         child.skip();
       },
       CallExpression(child) {
@@ -399,15 +394,8 @@ function getThisBinding(thisEnvFn, inConstructor) {
 
     const supers = new WeakSet();
     thisEnvFn.traverse({
-      Function: child => {
-        if (
-          child.isArrowFunctionExpression() ||
-          child.isClassProperty() ||
-          child === this
-        ) {
-          return;
-        }
-
+      Function(child) {
+        if (child.isArrowFunctionExpression()) return;
         child.skip();
       },
       CallExpression(child) {
@@ -530,7 +518,7 @@ function getScopeInformation(fnPath) {
 
   fnPath.traverse({
     Function(child) {
-      if (child.isArrowFunctionExpression() || child.isClassProperty()) return;
+      if (child.isArrowFunctionExpression()) return;
       child.skip();
     },
     ThisExpression(child) {

@@ -471,6 +471,35 @@ helpers.possibleConstructorReturn = template(`
   });
 `);
 
+helpers.privateClassPropertyKey = template(`
+  (function () {
+    var id = 0;
+    return function(name) {
+      // Can we use a middle finger emoji?
+      return "__private_" + (id++) + "_" + name;
+    };
+  })()
+`);
+
+helpers.privateClassPropertyGetSpec = template(`
+  (function(receiver, privateMap) {
+    if (!privateMap.has(receiver)) {
+      throw new TypeError("attempted to get private field on non-instance");
+    }
+    return privateMap.get(receiver);
+  })
+`);
+
+helpers.privateClassPropertyPutSpec = template(`
+  (function(receiver, privateMap, value) {
+    if (!privateMap.has(receiver)) {
+      throw new TypeError("attempted to set private field on non-instance");
+    }
+    privateMap.set(receiver, value);
+    return value;
+  })
+`);
+
 helpers.selfGlobal = template(`
   typeof global === "undefined" ? self : global
 `);

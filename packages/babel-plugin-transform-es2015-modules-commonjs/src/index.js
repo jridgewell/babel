@@ -42,14 +42,6 @@ const buildExportAll = template(`
   });
 `);
 
-const THIS_BREAK_KEYS = [
-  "FunctionExpression",
-  "FunctionDeclaration",
-  "ClassProperty",
-  "ClassMethod",
-  "ObjectMethod",
-];
-
 export default function() {
   const REASSIGN_REMAP_SKIP = Symbol();
 
@@ -197,10 +189,17 @@ export default function() {
         // function properly.
         if (this.ranCommonJS) return;
 
-        if (
-          state.opts.allowTopLevelThis !== true &&
-          !path.findParent(path => THIS_BREAK_KEYS.indexOf(path.type) >= 0)
-        ) {
+        if (state.opts.allowTopLevelThis === true) {
+          return;
+        }
+
+        const context = path.findParent(path => {
+          return (
+            (path.isFunction() && !path.isArrowFunctionExpression()) ||
+            path.isClass()
+          );
+        });
+        if (!context) {
           path.replaceWith(t.identifier("undefined"));
         }
       },
