@@ -1,4 +1,10 @@
-import defineType, { assertNodeType } from "./index";
+import defineType, {
+  assertEach,
+  assertOneOf,
+  assertNodeType,
+  assertValueType,
+  chain,
+} from "./index";
 
 defineType("AwaitExpression", {
   builder: ["argument"],
@@ -16,6 +22,41 @@ defineType("BindExpression", {
   aliases: ["Expression"],
   fields: {
     // todo
+  },
+});
+
+defineType("ClassPrivateMethod", {
+  aliases: ["Function", "Scopable", "BlockParent", "FunctionParent", "Method"],
+  builder: ["kind", "key", "params", "body", "static", "generator", "async"],
+  visitor: ["key", "params", "body"],
+  fields: {
+    params: {
+      validate: chain(
+        assertValueType("array"),
+        assertEach(assertNodeType("LVal")),
+      ),
+    },
+    generator: {
+      default: false,
+      validate: assertValueType("boolean"),
+    },
+    async: {
+      validate: assertValueType("boolean"),
+      default: false,
+    },
+    body: {
+      validate: assertNodeType("BlockStatement"),
+    },
+    static: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+    key: {
+      validate: assertNodeType("PrivateName"),
+    },
+    kind: {
+      validate: assertOneOf("get", "set", "method"),
+    },
   },
 });
 

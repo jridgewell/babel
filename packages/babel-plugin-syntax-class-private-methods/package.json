@@ -1,0 +1,11 @@
+{
+  "name": "babel-plugin-syntax-class-private-methods",
+  "version": "7.0.0-alpha.20",
+  "description": "Allow parsing of class private methods",
+  "repository": "https://github.com/babel/babel/tree/master/packages/babel-plugin-syntax-class-private-methods",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "keywords": [
+    "babel-plugin"
+  ]
+}

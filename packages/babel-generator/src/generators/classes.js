@@ -135,6 +135,8 @@ export function ClassMethod(node: Object) {
   this.print(node.body, node);
 }
 
+export { ClassMethod as ClassPrivateMethod };
+
 export function _classMethodHead(node) {
   this.printJoin(node.decorators, node);
 

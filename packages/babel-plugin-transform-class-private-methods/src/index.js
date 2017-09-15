@@ -1,49 +1,8 @@
 import nameFunction from "babel-helper-function-name";
 import template from "babel-template";
-import syntaxClassProperties from "babel-plugin-syntax-class-properties";
+import syntaxClassPrivateMethods from "babel-plugin-syntax-class-private-methods";
 
 export default function({ types: t }) {
-  const findBareSupers = {
-    Super(path) {
-      if (path.parentPath.isCallExpression({ callee: path.node })) {
-        this.push(path.parentPath);
-      }
-    },
-
-    ClassBody(path) {
-      path.skip();
-    },
-
-    Function(path) {
-      if (path.isArrowFunctionExpression()) return;
-      path.skip();
-    },
-  };
-
-  const collisionVisitor = {
-    TypeAnnotation(path) {
-      path.skip();
-    },
-
-    ReferencedIdentifier(path) {
-      if (this.scope.hasOwnBinding(path.node.name)) {
-        this.collision = true;
-        path.stop();
-      }
-    },
-  };
-
-  const remapThisVisitor = {
-    ThisExpression(path) {
-      path.replaceWith(this.thisRef);
-    },
-
-    Function(path) {
-      if (path.isArrowFunctionExpression()) return;
-      path.skip();
-    },
-  };
-
   function collectPropertiesVisitor(body, propNames) {
     for (const path of body.get("body")) {
       if (path.isClassMethod({ kind: "constructor" })) {
@@ -51,76 +10,38 @@ export default function({ types: t }) {
         continue;
       }
 
-      if (path.isClassPrivateMethod()) {
-        const { name } = path.node.key.id;
-        const seen = propNames.privateProps;
-        if (seen[name] && seen[name] !== "method") {
-          throw path.buildCodeFrameError("duplicate private class field");
+      if (!path.isClassPrivateMethod()) continue;
+
+      const { node } = path;
+      const { key, kind, static: isStatic } = node;
+      const { name } = key.id;
+      const seen = propNames.privateProps;
+
+      let descriptor = seen[name];
+      if (descriptor) {
+        if (kind === "method" || descriptor.method || descriptor.static !== isStatic) {
+          throw path.buildCodeFrameError("duplicate class field");
         }
-
-        seen[name] = "method";
-
-        continue;
+      } else {
+        descriptor = seen[name] = {
+          name,
+          get: null,
+          set: null,
+          method: null,
+          static: false,
+        };
       }
 
-      if (!path.isProperty()) continue;
-
-      const { key, computed, static: isStatic } = path.node;
-      propNames[isStatic ? "staticProps" : "instanceProps"].push(path);
-
-      if (computed) continue;
-
-      const isPrivate = path.isClassPrivateProperty();
-      const name = isPrivate
-        ? key.id.name
-        : t.isIdentifier(key) ? key.name : key.value;
-      const seen =
-        propNames[
-          isPrivate
-            ? "privateProps"
-            : isStatic ? "publicStaticProps" : "publicProps"
-        ];
-
-      if (seen[name]) {
-        throw path.buildCodeFrameError("duplicate class field");
-      }
-      seen[name] = true;
+      descriptor[kind] = t.functionExpression(
+        node.id,
+        node.params,
+        node.body,
+        node.generator,
+        node.async,
+      );
+      descriptor.static = isStatic;
     }
   }
-
-  const staticErrorVisitor = {
-    ClassBody(path) {
-      path.skip();
-    },
-
-    ClassProperty(path) {
-      const { computed, key, static: isStatic } = path.node;
-      if (computed || !isStatic) return;
-
-      const name = t.isIdentifier(key) ? key.name : key.value;
-      if (name === "prototype") {
-        throw path.buildCodeFrameError("illegal static class field");
-      }
-    },
-
-    PrivateName(path) {
-      const { parentPath, node } = path;
-      if (parentPath.isClassPrivateProperty({ key: node })) return;
-      if (parentPath.isClassPrivateMethod({ key: node })) return;
-
-      if (parentPath.isMemberExpression({ property: node, computed: false })) {
-        if (!this.privateProps[node.id.name]) {
-          throw path.buildCodeFrameError("unknown private property");
-        }
-
-        return;
-      }
-
-      throw path.buildCodeFrameError(
-        `illegal syntax. Did you mean \`this.#${node.id.name}\`?`,
-      );
-    },
-  };
 
   const privateNameRemapper = {
     PrivateName(path) {
@@ -207,10 +128,17 @@ export default function({ types: t }) {
 
   const privateNameRemapperLoose = {
     PrivateName(path) {
-      const { parentPath, node } = path;
+      const { parentPath, parent, node } = path;
       if (node.id.name !== this.name) {
         return;
       }
+
+      if (parentPath.isMethod({ key: node })) {
+        parent.computed = true;
+        path.replaceWith(this.privateKey);
+        return;
+      }
+
       if (!parentPath.isMemberExpression()) return;
 
       const object = parentPath.get("object");
@@ -218,7 +146,7 @@ export default function({ types: t }) {
       object.replaceWith(
         t.callExpression(this.base, [object.node, this.privateKey]),
       );
-      parentPath.node.computed = true;
+      parent.computed = true;
       path.replaceWith(this.privateKey);
     },
 
@@ -226,15 +154,6 @@ export default function({ types: t }) {
       path.skip();
     },
   };
-
-  const buildPublicProperty = template(`
-    Object.defineProperty(REF, KEY, {
-      configurable: true,
-      enumerable: true,
-      writable: true,
-      value: VALUE
-    });
-  `);
 
   const buildPrivateProperty = template(`
     Object.defineProperty(REF, KEY, {
@@ -245,37 +164,16 @@ export default function({ types: t }) {
     });
   `);
 
-  function buildPublicClassPropertySpec(ref, prop) {
-    const { key, value, computed } = prop.node;
-    return buildPublicProperty({
-      REF: ref,
-      KEY: t.isIdentifier(key) && !computed ? t.stringLiteral(key.name) : key,
-      VALUE: value || prop.scope.buildUndefinedNode(),
-    });
-  }
-
-  function buildPublicClassPropertyLoose(ref, prop) {
-    const { key, value, computed } = prop.node;
-    return t.expressionStatement(
-      t.assignmentExpression(
-        "=",
-        t.memberExpression(ref, key, computed || t.isLiteral(key)),
-        value || prop.scope.buildUndefinedNode(),
-      ),
-    );
-  }
-
-  function buildPrivateClassPropertySpec(ref, prop, classBody, nodes) {
+  function buildPrivateClassPropertySpec(ref, prop, klass, nodes) {
     const { node } = prop;
     const { name } = node.key.id;
-    const { file } = classBody.hub;
-    const privateMap = classBody.scope.generateDeclaredUidIdentifier(name);
+    const { file } = klass.hub;
+    const privateMap = klass.scope.generateDeclaredUidIdentifier(name);
 
-    classBody.traverse(privateNameRemapper, {
+    klass.traverse(privateNameRemapper, {
       name,
       privateMap,
       get: file.addHelper("classPrivateFieldGet"),
-      put: file.addHelper("classPrivateFieldPut"),
     });
 
     nodes.push(
@@ -291,72 +189,64 @@ export default function({ types: t }) {
     return t.expressionStatement(
       t.callExpression(t.memberExpression(privateMap, t.identifier("set")), [
         ref,
-        node.value || classBody.scope.buildUndefinedNode(),
+        node.value || klass.scope.buildUndefinedNode(),
       ]),
     );
   }
 
-  function buildPrivateClassPropertyLoose(ref, prop, classBody, nodes) {
-    const { key, value } = prop.node;
-    const { name } = key.id;
-    const { file } = classBody.hub;
-    const privateKey = classBody.scope.generateDeclaredUidIdentifier(name);
+  function buildPrivateClassPropertyLoose(ref, descriptor, klass, nodes) {
+    const { name, method } = descriptor;
+    const { file } = klass.hub;
+    const privateName = klass.scope.generateDeclaredUidIdentifier(name);
+    const fnRef = klass.scope.generateDeclaredUidIdentifier(name);
 
-    classBody.traverse(privateNameRemapperLoose, {
-      name,
-      privateKey,
-      base: file.addHelper("classPrivateFieldBase"),
-    });
+    console.log(name);
+    klass.traverse(privateNameRemapperLoose, { name, privateName });
 
     nodes.push(
       t.expressionStatement(
         t.assignmentExpression(
           "=",
-          privateKey,
+          privateName,
           t.callExpression(file.addHelper("classPrivateFieldKey"), [
             t.stringLiteral(name),
           ]),
         ),
       ),
+      t.expressionStatement(t.assignmentExpression("=", fnRef, method)),
     );
 
     return buildPrivateProperty({
       REF: ref,
-      KEY: privateKey,
-      VALUE: value || prop.scope.buildUndefinedNode(),
+      KEY: privateName,
+      VALUE: fnRef,
     });
   }
 
   return {
-    inherits: syntaxClassProperties,
+    inherits: syntaxClassPrivateMethods,
 
     visitor: {
-      Class(path, state) {
-        const buildPublicClassProperty = state.opts.loose
-          ? buildPublicClassPropertyLoose
-          : buildPublicClassPropertySpec;
-        const buildPrivateClassProperty = state.opts.loose
+      Class(path) {
+        const buildPrivateClassProperty = this.opts.loose
           ? buildPrivateClassPropertyLoose
           : buildPrivateClassPropertySpec;
         const isDerived = !!path.node.superClass;
 
-        const instanceProps = [];
-        const staticProps = [];
         const body = path.get("body");
         const { scope } = path;
 
-        const propNames = {
-          publicProps: Object.create(null),
-          publicStaticProps: Object.create(null),
+        const state = {
           privateProps: Object.create(null),
-          instanceProps,
-          staticProps,
           constructor: null,
         };
-        collectPropertiesVisitor(body, propNames);
-        body.traverse(staticErrorVisitor, propNames);
+        collectPropertiesVisitor(body, state);
+        body.traverse(staticErrorVisitor, state);
 
-        if (!instanceProps.length && !staticProps.length) return;
+        const { privateProps } = state;
+        const propNames = Object.keys(privateProps);
+
+        if (!propNames.length) return;
 
         let ref;
         if (path.isClassExpression() || !path.node.id) {
@@ -370,16 +260,14 @@ export default function({ types: t }) {
         const nodes = [];
         let instanceBody = [];
 
-        for (const prop of staticProps) {
-          if (prop.isClassPrivateProperty()) {
-            nodes.push(buildPrivateClassProperty(ref, prop, body, nodes));
-          } else {
-            nodes.push(buildPublicClassProperty(ref, prop));
-          }
+        for (const name of propNames) {
+          const prop = privateProps[name];
+          if (!prop.static) continue;
+          nodes.push(buildPrivateClassProperty(ref, prop, path, nodes));
         }
 
         if (instanceProps.length) {
-          let constructor = propNames.constructor;
+          let { constructor } = state;
           if (!constructor) {
             const newConstructor = t.classMethod(
               "constructor",
@@ -428,13 +316,7 @@ export default function({ types: t }) {
               prop.traverse(remapThisVisitor, { thisRef });
             }
 
-            if (prop.isClassPrivateProperty()) {
-              instanceBody.push(
-                buildPrivateClassProperty(thisRef, prop, body, nodes),
-              );
-            } else {
-              instanceBody.push(buildPublicClassProperty(thisRef, prop));
-            }
+            instanceBody.push(buildPrivateClassProperty(thisRef, prop, path, nodes));
           }
 
           if (extract) {

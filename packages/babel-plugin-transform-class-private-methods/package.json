@@ -1,0 +1,19 @@
+{
+  "name": "babel-plugin-transform-class-private-methods",
+  "version": "7.0.0-alpha.20",
+  "description": "This plugin transforms class private methods",
+  "repository": "https://github.com/babel/babel/tree/master/packages/babel-plugin-transform-class-private-methods",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "keywords": [
+    "babel-plugin"
+  ],
+  "dependencies": {
+    "babel-helper-function-name": "7.0.0-alpha.20",
+    "babel-plugin-syntax-class-private-methods": "7.0.0-alpha.20",
+    "babel-template": "7.0.0-alpha.20"
+  },
+  "devDependencies": {
+    "babel-helper-plugin-test-runner": "7.0.0-beta.0"
+  }
+}
