@@ -251,8 +251,20 @@ export default class ClassTransformer {
     for (const path of classBodyPaths) {
       const node = path.node;
 
-      if (path.isProperty()) {
+      if (path.isClassProperty()) {
         throw path.buildCodeFrameError("Missing class properties transform.");
+      }
+
+      if (path.isClassPrivateProperty()) {
+        throw path.buildCodeFrameError(
+          "Missing class private properties transform.",
+        );
+      }
+
+      if (path.isClassPrivateMethod()) {
+        throw path.buildCodeFrameError(
+          "Missing class private methods transform.",
+        );
       }
 
       if (node.decorators) {

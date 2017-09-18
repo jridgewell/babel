@@ -19,29 +19,53 @@ export default function({ types: t }) {
 
       let descriptor = seen[name];
       if (descriptor) {
-        if (kind === "method" || descriptor.method || descriptor.static !== isStatic) {
+        if (
+          kind === "method" ||
+          descriptor.value ||
+          descriptor.static !== isStatic
+        ) {
           throw path.buildCodeFrameError("duplicate class field");
+        }
+        if (descriptor[kind]) {
+          throw path.buildCodeFrameError(`duplicate class ${kind} field`);
         }
       } else {
         descriptor = seen[name] = {
           name,
           get: null,
           set: null,
-          method: null,
-          static: false,
+          value: null,
+          static: isStatic,
         };
       }
 
-      descriptor[kind] = t.functionExpression(
-        node.id,
+      const descriptorKind = kind === "method" ? "value" : kind;
+      descriptor[descriptorKind] = t.functionExpression(
+        key.id,
         node.params,
         node.body,
         node.generator,
         node.async,
       );
-      descriptor.static = isStatic;
     }
   }
+
+  const findBareSupers = {
+    Super(path) {
+      if (path.parentPath.isCallExpression({ callee: path.node })) {
+        this.push(path.parentPath);
+      }
+    },
+
+    ClassBody(path) {
+      path.skip();
+    },
+
+    Function(path) {
+      if (path.isArrowFunctionExpression()) return;
+      path.skip();
+    },
+  };
 
   const privateNameRemapper = {
     PrivateName(path) {
@@ -133,13 +157,9 @@ export default function({ types: t }) {
         return;
       }
 
-      if (parentPath.isMethod({ key: node })) {
-        parent.computed = true;
-        path.replaceWith(this.privateKey);
+      if (!parentPath.isMemberExpression({ property: node, computed: false })) {
         return;
       }
-
-      if (!parentPath.isMemberExpression()) return;
 
       const object = parentPath.get("object");
 
@@ -155,22 +175,30 @@ export default function({ types: t }) {
     },
   };
 
-  const buildPrivateProperty = template(`
+  const buildPrivateMethod = template(`
     Object.defineProperty(REF, KEY, {
       // configurable is false by default
       // enumerable is false by default
       writable: true,
-      value: VALUE
+      value: VALUE,
+    });
+  `);
+  const buildPrivateAccessor = template(`
+    Object.defineProperty(REF, KEY, {
+      // configurable is false by default
+      // enumerable is false by default
+      get: GET,
+      set: SET,
     });
   `);
 
-  function buildPrivateClassPropertySpec(ref, prop, klass, nodes) {
+  function buildPrivateClassPropertySpec(ref, prop, classBody, nodes) {
     const { node } = prop;
     const { name } = node.key.id;
-    const { file } = klass.hub;
-    const privateMap = klass.scope.generateDeclaredUidIdentifier(name);
+    const { file } = classBody.hub;
+    const privateMap = classBody.scope.generateDeclaredUidIdentifier(name);
 
-    klass.traverse(privateNameRemapper, {
+    classBody.traverse(privateNameRemapper, {
       name,
       privateMap,
       get: file.addHelper("classPrivateFieldGet"),
@@ -189,37 +217,65 @@ export default function({ types: t }) {
     return t.expressionStatement(
       t.callExpression(t.memberExpression(privateMap, t.identifier("set")), [
         ref,
-        node.value || klass.scope.buildUndefinedNode(),
+        node.value || classBody.scope.buildUndefinedNode(),
       ]),
     );
   }
 
-  function buildPrivateClassPropertyLoose(ref, descriptor, klass, nodes) {
-    const { name, method } = descriptor;
-    const { file } = klass.hub;
-    const privateName = klass.scope.generateDeclaredUidIdentifier(name);
-    const fnRef = klass.scope.generateDeclaredUidIdentifier(name);
+  function buildPrivateDescriptorRef(name, value, scope, nodes) {
+    if (!value) return t.nullLiteral();
+    const ref = scope.generateDeclaredUidIdentifier(name);
+    nodes.push(t.assignmentExpression("=", ref, value));
+    return ref;
+  }
 
-    console.log(name);
-    klass.traverse(privateNameRemapperLoose, { name, privateName });
+  function buildPrivateClassPropertyLoose(ref, descriptor, classBody, nodes) {
+    const { name } = descriptor;
+    const { scope } = classBody;
+    const { file } = classBody.hub;
+    const privateKey = scope.generateDeclaredUidIdentifier(`${name}Key`);
+
+    classBody.traverse(privateNameRemapperLoose, {
+      name,
+      privateKey,
+      base: file.addHelper("classPrivateFieldBase"),
+    });
 
     nodes.push(
       t.expressionStatement(
         t.assignmentExpression(
           "=",
-          privateName,
+          privateKey,
           t.callExpression(file.addHelper("classPrivateFieldKey"), [
             t.stringLiteral(name),
           ]),
         ),
       ),
-      t.expressionStatement(t.assignmentExpression("=", fnRef, method)),
     );
 
-    return buildPrivateProperty({
+    if (descriptor.value) {
+      return buildPrivateMethod({
+        REF: ref,
+        KEY: privateKey,
+        VALUE: buildPrivateDescriptorRef(name, descriptor.value, scope, nodes),
+      });
+    }
+
+    return buildPrivateAccessor({
       REF: ref,
-      KEY: privateName,
-      VALUE: fnRef,
+      KEY: privateKey,
+      GET: buildPrivateDescriptorRef(
+        `${name}Getter`,
+        descriptor.get,
+        scope,
+        nodes,
+      ),
+      SET: buildPrivateDescriptorRef(
+        `${name}Setter`,
+        descriptor.set,
+        scope,
+        nodes,
+      ),
     });
   }
 
@@ -241,7 +297,6 @@ export default function({ types: t }) {
           constructor: null,
         };
         collectPropertiesVisitor(body, state);
-        body.traverse(staticErrorVisitor, state);
 
         const { privateProps } = state;
         const propNames = Object.keys(privateProps);
@@ -259,11 +314,15 @@ export default function({ types: t }) {
 
         const nodes = [];
         let instanceBody = [];
+        const instanceProps = [];
 
         for (const name of propNames) {
           const prop = privateProps[name];
-          if (!prop.static) continue;
-          nodes.push(buildPrivateClassProperty(ref, prop, path, nodes));
+          if (!prop.static) {
+            instanceProps.push(prop);
+            continue;
+          }
+          nodes.push(buildPrivateClassProperty(ref, prop, body, nodes));
         }
 
         if (instanceProps.length) {
@@ -289,34 +348,21 @@ export default function({ types: t }) {
             [constructor] = body.unshiftContainer("body", newConstructor);
           }
 
-          const collisionState = {
-            collision: false,
-            scope: constructor.scope,
-          };
           const bareSupers = [];
 
           if (isDerived) {
             constructor.traverse(findBareSupers, bareSupers);
           }
 
-          if (bareSupers.length <= 1) {
-            for (const prop of instanceProps) {
-              prop.traverse(collisionVisitor, collisionState);
-              if (collisionState.collision) break;
-            }
-          }
-
-          const extract = bareSupers.length > 1 || collisionState.collision;
+          const extract = bareSupers.length > 1;
           const thisRef = extract
             ? scope.generateUidIdentifier("this")
             : t.thisExpression();
 
           for (const prop of instanceProps) {
-            if (extract) {
-              prop.traverse(remapThisVisitor, { thisRef });
-            }
-
-            instanceBody.push(buildPrivateClassProperty(thisRef, prop, path, nodes));
+            instanceBody.push(
+              buildPrivateClassProperty(thisRef, prop, body, nodes),
+            );
           }
 
           if (extract) {
@@ -353,8 +399,10 @@ export default function({ types: t }) {
           }
         }
 
-        for (const prop of [...staticProps, ...instanceProps]) {
-          prop.remove();
+        for (const path of body.get("body")) {
+          if (path.isClassPrivateMethod()) {
+            path.remove();
+          }
         }
 
         if (!nodes.length) return;
@@ -377,6 +425,7 @@ export default function({ types: t }) {
       },
 
       PrivateName(path) {
+        console.log(path.getAncestry().map(p => p.type));
         throw path.buildCodeFrameError(
           "PrivateName is illegal outside ClassBody",
         );

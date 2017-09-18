@@ -1,5 +1,7 @@
 class Foo {
-  async #foo() {}
+  async #foo() {
+    this.#foo;
+  }
 
   test() {
     const foo = this.#foo;

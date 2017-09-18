@@ -1,5 +1,7 @@
 class Foo {
-  #foo() {}
+  #foo() {
+    this.#foo;
+  }
 
   test() {
     const foo = this.#foo;
