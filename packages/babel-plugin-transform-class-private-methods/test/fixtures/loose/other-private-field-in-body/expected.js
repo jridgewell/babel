@@ -5,19 +5,15 @@ var _field, _methodKey, _method, _asyncMethodKey, _asyncMethod, _generatorMethod
 let Foo = function Foo() {
   babelHelpers.classCallCheck(this, Foo);
   Object.defineProperty(this, _methodKey, {
-    writable: true,
     value: _method
   });
   Object.defineProperty(this, _asyncMethodKey, {
-    writable: true,
     value: _asyncMethod
   });
   Object.defineProperty(this, _generatorMethodKey, {
-    writable: true,
     value: _generatorMethod
   });
   Object.defineProperty(this, _asyncGeneratorMethodKey, {
-    writable: true,
     value: _asyncGeneratorMethod
   });
   Object.defineProperty(this, _fooKey, {

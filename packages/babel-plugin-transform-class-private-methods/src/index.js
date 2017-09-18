@@ -179,7 +179,7 @@ export default function({ types: t }) {
     Object.defineProperty(REF, KEY, {
       // configurable is false by default
       // enumerable is false by default
-      writable: true,
+      // writable is false by defaul
       value: VALUE,
     });
   `);
@@ -192,9 +192,8 @@ export default function({ types: t }) {
     });
   `);
 
-  function buildPrivateClassPropertySpec(ref, prop, classBody, nodes) {
-    const { node } = prop;
-    const { name } = node.key.id;
+  function buildPrivateClassPropertySpec(ref, descriptor, classBody, nodes) {
+    const { name } = descriptor;
     const { file } = classBody.hub;
     const privateMap = classBody.scope.generateDeclaredUidIdentifier(name);
 
@@ -217,7 +216,7 @@ export default function({ types: t }) {
     return t.expressionStatement(
       t.callExpression(t.memberExpression(privateMap, t.identifier("set")), [
         ref,
-        node.value || classBody.scope.buildUndefinedNode(),
+        descriptor.method,
       ]),
     );
   }
@@ -253,17 +252,13 @@ export default function({ types: t }) {
       ),
     );
 
-    if (descriptor.value) {
-      return buildPrivateMethod({
-        REF: ref,
-        KEY: privateKey,
-        VALUE: buildPrivateDescriptorRef(name, descriptor.value, scope, nodes),
-      });
-    }
-
-    return buildPrivateAccessor({
+    const builder = descriptor.value
+      ? buildPrivateMethod
+      : buildPrivateAccessor;
+    return builder({
       REF: ref,
       KEY: privateKey,
+      VALUE: buildPrivateDescriptorRef(name, descriptor.value, scope, nodes),
       GET: buildPrivateDescriptorRef(
         `${name}Getter`,
         descriptor.get,
