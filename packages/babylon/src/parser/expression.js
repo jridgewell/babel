@@ -1103,7 +1103,6 @@ export default class ExpressionParser extends LValParser {
     }
 
     node.callee = this.parseNoCallExpr();
-    if (this.eat(tt.questionDot)) node.optional = true;
     this.parseNewArguments(node);
     return this.finishNode(node, "NewExpression");
   }

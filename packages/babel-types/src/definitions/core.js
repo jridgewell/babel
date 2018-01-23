@@ -522,7 +522,31 @@ defineType("MemberExpression", {
   },
 });
 
-defineType("NewExpression", { inherits: "CallExpression" });
+defineType("NewExpression", {
+  visitor: ["callee", "arguments", "typeParameters"],
+  builder: ["callee", "arguments"],
+  aliases: ["Expression"],
+  fields: {
+    callee: {
+      validate: assertNodeType("Expression"),
+    },
+    arguments: {
+      validate: chain(
+        assertValueType("array"),
+        assertEach(
+          assertNodeType("Expression", "SpreadElement", "JSXNamespacedName"),
+        ),
+      ),
+    },
+    typeParameters: {
+      validate: assertNodeType(
+        "TypeParameterInstantiation",
+        "TSTypeParameterInstantiation",
+      ),
+      optional: true,
+    },
+  },
+});
 
 defineType("Program", {
   visitor: ["directives", "body"],

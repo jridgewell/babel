@@ -534,7 +534,6 @@ export type CallExpression = CallOrNewBase & {
 
 export type NewExpression = CallOrNewBase & {
   type: "NewExpression",
-  optional?: boolean, // TODO: Not in spec
 };
 
 export type SequenceExpression = NodeBase & {

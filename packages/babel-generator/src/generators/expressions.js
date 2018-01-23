@@ -59,7 +59,6 @@ export function NewExpression(node: Object, parent: Object) {
   if (
     this.format.minified &&
     node.arguments.length === 0 &&
-    !node.optional &&
     !t.isCallExpression(parent, { callee: node }) &&
     !t.isMemberExpression(parent) &&
     !t.isNewExpression(parent)
@@ -69,9 +68,6 @@ export function NewExpression(node: Object, parent: Object) {
 
   this.print(node.typeParameters, node); // TS
 
-  if (node.optional) {
-    this.token("?.");
-  }
   this.token("(");
   this.printList(node.arguments, node);
   this.token(")");

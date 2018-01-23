@@ -909,7 +909,6 @@ A function or method call expression.
 ```js
 interface NewExpression <: CallExpression {
   type: "NewExpression";
-  optional: boolean | null;
 }
 ```
 
