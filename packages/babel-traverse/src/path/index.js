@@ -106,7 +106,26 @@ export default class NodePath {
   }
 
   getScope(scope: Scope) {
-    return this.isScope() ? new Scope(this) : scope;
+    if (this.isScope()) {
+      return new Scope(this);
+    }
+
+    if (!scope) {
+      return scope;
+    }
+
+    const { parentPath, key } = this;
+    if (
+      scope.path === parentPath &&
+      // FunctionDeclaration and ClassDeclaration
+      ((key === "id" && parentPath.isDeclaration()) ||
+        // ClassMethod and ObjectMethod
+        (key === "key" && parentPath.isMethod()))
+    ) {
+      return scope.parent;
+    }
+
+    return scope;
   }
 
   setData(key: string, val: any): any {
