@@ -190,6 +190,7 @@ export default class Scope {
   static contextVariables = ["arguments", "undefined", "Infinity", "NaN"];
 
   get parent() {
+    // TODO
     const parent = this.path.findParent(p => p.isScope());
     return parent && parent.scope;
   }
