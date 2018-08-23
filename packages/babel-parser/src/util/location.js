@@ -1,6 +1,6 @@
 // @flow
 
-import { lineBreakG } from "./whitespace";
+import { nextLineBreak } from "./whitespace";
 
 export type Pos = {
   start: number,
@@ -35,16 +35,17 @@ export class SourceLocation {
 // The `getLineInfo` function is mostly useful when the
 // `locations` option is off (for performance reasons) and you
 // want to find the line/column position for a given character
-// offset. `input` should be the code string that the offset refers
+// offset. `buffer` should be the code buffer that the offset refers
 // into.
 
-export function getLineInfo(input: string, offset: number): Position {
-  for (let line = 1, cur = 0; ; ) {
-    lineBreakG.lastIndex = cur;
-    const match = lineBreakG.exec(input);
-    if (match && match.index < offset) {
+export function getLineInfo(buffer: Buffer, offset: number): Position {
+  let line = 1;
+  let cur = 0;
+  while (true) {
+    const index = nextLineBreak(buffer, cur);
+    if (index > -1 && index < offset) {
       ++line;
-      cur = match.index + match[0].length;
+      cur = index + 1;
     } else {
       return new Position(line, offset - cur);
     }

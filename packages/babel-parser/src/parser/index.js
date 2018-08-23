@@ -16,13 +16,13 @@ export default class Parser extends StatementParser {
     node: JSXOpeningElement,
   ) => JSXOpeningElement;
 
-  constructor(options: ?Options, input: string) {
+  constructor(options: ?Options, buffer: Buffer) {
     options = getOptions(options);
-    super(options, input);
+    super(options, buffer);
 
     this.options = options;
     this.inModule = this.options.sourceType === "module";
-    this.input = input;
+    this.buffer = buffer;
     this.plugins = pluginsMap(this.options.plugins);
     this.filename = options.sourceFilename;
   }

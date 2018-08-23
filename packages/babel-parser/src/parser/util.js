@@ -3,7 +3,7 @@
 import { types as tt, type TokenType } from "../tokenizer/types";
 import Tokenizer from "../tokenizer";
 import type { Node } from "../types";
-import { lineBreak } from "../util/whitespace";
+import { containsNewLine } from "../util/whitespace";
 
 // ## Parser utilities
 
@@ -86,8 +86,8 @@ export default class UtilParser extends Tokenizer {
   }
 
   hasPrecedingLineBreak(): boolean {
-    return lineBreak.test(
-      this.input.slice(this.state.lastTokEnd, this.state.start),
+    return containsNewLine(
+      this.buffer.slice(this.state.lastTokEnd, this.state.start),
     );
   }
 

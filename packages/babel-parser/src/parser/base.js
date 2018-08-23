@@ -16,7 +16,7 @@ export default class BaseParser {
 
   // Initialized by Tokenizer
   state: State;
-  input: string;
+  buffer: Buffer;
 
   isReservedWord(word: string): boolean {
     if (word === "await") {

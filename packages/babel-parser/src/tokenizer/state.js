@@ -8,12 +8,32 @@ import { types as ct, type TokContext } from "./context";
 import type { Token } from "./index";
 import { types as tt, type TokenType } from "./types";
 
+function isLowContinuation(byte: number): boolean {
+  return byte >= 0x80 && byte <= 0x8f;
+}
+
+function isLowMidContinuation(byte: number): boolean {
+  return byte >= 0x80 && byte <= 0x9f;
+}
+
+function isMidHighContinuation(byte: number): boolean {
+  return byte >= 0x90 && byte <= 0xbf;
+}
+
+function isHighContinuation(byte: number): boolean {
+  return byte >= 0xa0 && byte <= 0xbf;
+}
+
+function isContinuation(byte: number): boolean {
+  return byte >= 0x80 && byte <= 0xbf;
+}
+
 export default class State {
-  init(options: Options, input: string): void {
+  init(options: Options, buffer: Buffer): void {
     this.strict =
       options.strictMode === false ? false : options.sourceType === "module";
 
-    this.input = input;
+    this.buffer = buffer;
 
     this.potentialArrowAt = -1;
 
@@ -77,8 +97,7 @@ export default class State {
   // TODO
   strict: boolean;
 
-  // TODO
-  input: string;
+  buffer: Buffer;
 
   // Used to signify the start of a potential arrow function
   potentialArrowAt: number;
@@ -198,6 +217,142 @@ export default class State {
 
   curPosition(): Position {
     return new Position(this.curLine, this.pos - this.lineStart);
+  }
+
+  advance(): number {
+    const { buffer } = this;
+    const code = buffer[this.pos];
+
+    // This is **very** likely to always hit
+    // code < 0x80 is ASCII
+    // code < 0xC0 is Continuation Bytes
+    // C0, and C1 are always invalid bytes
+    if (code <= 0xc2) {
+      return ++this.pos;
+    }
+
+    switch (code) {
+      case 0xe0:
+        return this._e0();
+      case 0xed:
+        return this._ed();
+      case 0xf0:
+        return this._f0();
+      case 0xf4:
+        return this._f4();
+    }
+
+    // 0xC2..0xDF is the start of a two-byte series
+    // It must be followed by a continuation to be two bytes long.
+    if (code <= 0xdf) {
+      return this._continuation();
+    }
+
+    // 0xE1..0xEC, 0xEE, 0xEF are the start of a three-byte series
+    // It must be followed by any continuation then any continuation to be
+    // three bytes long.
+    if (code <= 0xef) {
+      return this._doubleContinuation();
+    }
+
+    // 0xF1..0xF3 is the start of a four-byte series
+    // It must be followed by any continuation then any continuation then any
+    // continuation to be four bytes long.
+    if (code <= 0xf3) {
+      return this._tripleContinuation();
+    }
+
+    // 0xF4..0xFF is an illegal start sequence
+    return ++this.pos;
+  }
+
+  _continuation(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isContinuation(buffer[pos])) {
+      return ++this.pos;
+    }
+
+    return pos;
+  }
+
+  _doubleContinuation(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isContinuation(buffer[pos])) {
+      return this._continuation();
+    }
+
+    return pos;
+  }
+
+  _tripleContinuation(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isContinuation(buffer[pos])) {
+      return this._doubleContinuation();
+    }
+
+    return pos;
+  }
+
+  // 0xE0 is the start of a three-byte series
+  // It must be followed by a high continuation then any continuation to be
+  // three bytes long.
+  _e0(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isHighContinuation(buffer[pos])) {
+      return this._continuation();
+    }
+
+    return pos;
+  }
+
+  // 0xED is the start of a three-byte series
+  // It must be followed by a low-mid continuation then any continuation to be
+  // three bytes long.
+  _ed(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isLowMidContinuation(buffer[pos])) {
+      return this._continuation();
+    }
+
+    return pos;
+  }
+
+  // 0xF0 is the start of a four-byte series
+  // It must be followed by a mid-high continuation then any continuation then
+  // any continuation to be three bytes long.
+  _f0(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isMidHighContinuation(buffer[pos])) {
+      return this._doubleContinuation();
+    }
+
+    return pos;
+  }
+
+  // 0xF4 is the start of a four-byte series
+  // It must be followed by a low continuation then any continuation then any
+  // continuation to be three bytes long.
+  _f4(): number {
+    const { buffer } = this;
+    const pos = ++this.pos;
+
+    if (pos < buffer.length && isLowContinuation(buffer[pos])) {
+      return this._doubleContinuation();
+    }
+
+    return pos;
   }
 
   clone(skipArrays?: boolean): State {

@@ -5,7 +5,7 @@
 // See https://github.com/mozilla/sweet.js/wiki/design
 
 import { types as tt } from "./types";
-import { lineBreak } from "../util/whitespace";
+import { containsNewLine } from "../util/whitespace";
 
 export class TokContext {
   constructor(
@@ -69,7 +69,7 @@ tt.name.updateContext = function(prevType) {
   this.state.exprAllowed = false;
 
   if (prevType === tt._let || prevType === tt._const || prevType === tt._var) {
-    if (lineBreak.test(this.input.slice(this.state.end))) {
+    if (containsNewLine(this.buffer.slice(this.state.end))) {
       this.state.exprAllowed = true;
     }
   }

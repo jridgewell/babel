@@ -1011,7 +1011,11 @@ export default class ExpressionParser extends LValParser {
 
     const node = this.startNodeAt(startPos, startLoc);
     this.addExtra(node, "rawValue", value);
-    this.addExtra(node, "raw", this.input.slice(startPos, this.state.end));
+    this.addExtra(
+      node,
+      "raw",
+      this.buffer.slice(startPos, this.state.end).toString("utf8"),
+    );
     node.value = value;
     this.next();
     return this.finishNode(node, type);
@@ -1229,8 +1233,9 @@ export default class ExpressionParser extends LValParser {
       }
     }
     elem.value = {
-      raw: this.input
+      raw: this.buffer
         .slice(this.state.start, this.state.end)
+        .toString("utf8")
         .replace(/\r\n?/g, "\n"),
       cooked: this.state.value,
     };

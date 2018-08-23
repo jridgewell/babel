@@ -79,11 +79,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       let out = "";
       let chunkStart = this.state.pos;
       for (;;) {
-        if (this.state.pos >= this.input.length) {
+        if (this.state.pos >= this.buffer.length) {
           this.raise(this.state.start, "Unterminated JSX contents");
         }
 
-        const ch = this.input.charCodeAt(this.state.pos);
+        const ch = this.buffer[this.state.pos];
 
         switch (ch) {
           case charCodes.lessThan:
@@ -95,18 +95,24 @@ export default (superClass: Class<Parser>): Class<Parser> =>
               }
               return this.getTokenFromCode(ch);
             }
-            out += this.input.slice(chunkStart, this.state.pos);
+            out += this.buffer
+              .slice(chunkStart, this.state.pos)
+              .toString("utf8");
             return this.finishToken(tt.jsxText, out);
 
           case charCodes.ampersand:
-            out += this.input.slice(chunkStart, this.state.pos);
+            out += this.buffer
+              .slice(chunkStart, this.state.pos)
+              .toString("utf8");
             out += this.jsxReadEntity();
             chunkStart = this.state.pos;
             break;
 
           default:
             if (isNewLine(ch)) {
-              out += this.input.slice(chunkStart, this.state.pos);
+              out += this.buffer
+                .slice(chunkStart, this.state.pos)
+                .toString("utf8");
               out += this.jsxReadNewLine(true);
               chunkStart = this.state.pos;
             } else {
@@ -117,12 +123,12 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     jsxReadNewLine(normalizeCRLF: boolean): string {
-      const ch = this.input.charCodeAt(this.state.pos);
+      const ch = this.buffer[this.state.pos];
       let out;
       ++this.state.pos;
       if (
         ch === charCodes.carriageReturn &&
-        this.input.charCodeAt(this.state.pos) === charCodes.lineFeed
+        this.buffer[this.state.pos] === charCodes.lineFeed
       ) {
         ++this.state.pos;
         out = normalizeCRLF ? "\n" : "\r\n";
@@ -139,25 +145,25 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       let out = "";
       let chunkStart = ++this.state.pos;
       for (;;) {
-        if (this.state.pos >= this.input.length) {
+        if (this.state.pos >= this.buffer.length) {
           this.raise(this.state.start, "Unterminated string constant");
         }
 
-        const ch = this.input.charCodeAt(this.state.pos);
+        const ch = this.buffer[this.state.pos];
         if (ch === quote) break;
         if (ch === charCodes.ampersand) {
-          out += this.input.slice(chunkStart, this.state.pos);
+          out += this.buffer.slice(chunkStart, this.state.pos).toString("utf8");
           out += this.jsxReadEntity();
           chunkStart = this.state.pos;
         } else if (isNewLine(ch)) {
-          out += this.input.slice(chunkStart, this.state.pos);
+          out += this.buffer.slice(chunkStart, this.state.pos).toString("utf8");
           out += this.jsxReadNewLine(false);
           chunkStart = this.state.pos;
         } else {
           ++this.state.pos;
         }
       }
-      out += this.input.slice(chunkStart, this.state.pos++);
+      out += this.buffer.slice(chunkStart, this.state.pos++).toString("utf8");
       return this.finishToken(tt.string, out);
     }
 
@@ -165,11 +171,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       let str = "";
       let count = 0;
       let entity;
-      let ch = this.input[this.state.pos];
+      let ch = this.buffer[this.state.pos];
 
       const startPos = ++this.state.pos;
-      while (this.state.pos < this.input.length && count++ < 10) {
-        ch = this.input[this.state.pos++];
+      while (this.state.pos < this.buffer.length && count++ < 10) {
+        ch = this.buffer[this.state.pos++];
         if (ch === ";") {
           if (str[0] === "#") {
             if (str[1] === "x") {
@@ -208,11 +214,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       let ch;
       const start = this.state.pos;
       do {
-        ch = this.input.charCodeAt(++this.state.pos);
+        ch = this.buffer[++this.state.pos];
       } while (isIdentifierChar(ch) || ch === charCodes.dash);
       return this.finishToken(
         tt.jsxName,
-        this.input.slice(start, this.state.pos),
+        this.buffer.slice(start, this.state.pos).toString("utf8"),
       );
     }
 

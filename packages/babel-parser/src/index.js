@@ -59,7 +59,7 @@ function getParser(options: ?Options, input: string): Parser {
     cls = getParserClass(options.plugins);
   }
 
-  return new cls(options, input);
+  return new cls(options, Buffer.from(input));
 }
 
 const parserClassCache: { [key: string]: Class<Parser> } = {};

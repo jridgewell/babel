@@ -74,8 +74,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     // past the initial comment.
     flowPragma: void | null | "flow" | "noflow";
 
-    constructor(options: ?Options, input: string) {
-      super(options, input);
+    constructor(options: ?Options, buffer: Buffer) {
+      super(options, buffer);
       this.flowPragma = undefined;
     }
 
@@ -1030,7 +1030,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       node.types = [];
       this.expect(tt.bracketL);
       // We allow trailing commas
-      while (this.state.pos < this.input.length && !this.match(tt.bracketR)) {
+      while (this.state.pos < this.buffer.length && !this.match(tt.bracketR)) {
         node.types.push(this.flowParseType());
         if (this.match(tt.bracketR)) break;
         this.expect(tt.comma);
@@ -1810,7 +1810,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
     // ensure that inside flow types, we bypass the jsx parser plugin
     readToken(code: number): void {
-      const next = this.input.charCodeAt(this.state.pos + 1);
+      const next = this.buffer[this.state.pos + 1];
       if (
         this.state.inType &&
         (code === charCodes.greaterThan || code === charCodes.lessThan)
@@ -2570,7 +2570,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     readToken_mult_modulo(code: number): void {
-      const next = this.input.charCodeAt(this.state.pos + 1);
+      const next = this.buffer[this.state.pos + 1];
       if (
         code === charCodes.asterisk &&
         next === charCodes.slash &&
@@ -2599,7 +2599,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
       let end;
       if (this.hasPlugin("flow") && this.state.hasFlowComment) {
-        end = this.input.indexOf("*-/", (this.state.pos += 2));
+        end = this.buffer.indexOf("*-/", (this.state.pos += 2));
         if (end === -1) this.raise(this.state.pos - 2, "Unterminated comment");
         this.state.pos = end + 3;
         return;
@@ -2609,13 +2609,16 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     skipFlowComment(): number | boolean {
-      const ch2 = this.input.charCodeAt(this.state.pos + 2);
-      const ch3 = this.input.charCodeAt(this.state.pos + 3);
+      const ch2 = this.buffer[this.state.pos + 2];
+      const ch3 = this.buffer[this.state.pos + 3];
 
       if (ch2 === charCodes.colon && ch3 === charCodes.colon) {
         return 4; // check for /*::
       }
-      if (this.input.slice(this.state.pos + 2, 14) === "flow-include") {
+      if (
+        this.buffer.slice(this.state.pos + 2, 14).toString("utf8") ===
+        "flow-include"
+      ) {
         return 14; // check for /*flow-include
       }
       if (ch2 === charCodes.colon && ch3 !== charCodes.colon) {
@@ -2625,7 +2628,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     hasFlowCommentCompletion(): void {
-      const end = this.input.indexOf("*/", this.state.pos);
+      const end = this.buffer.indexOf("*/", this.state.pos);
       if (end === -1) {
         this.raise(this.state.pos, "Unterminated comment");
       }

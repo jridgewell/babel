@@ -3,7 +3,7 @@
 import * as N from "../types";
 import { types as tt, type TokenType } from "../tokenizer/types";
 import ExpressionParser from "./expression";
-import { lineBreak } from "../util/whitespace";
+import { containsNewLine } from "../util/whitespace";
 
 // Reused empty array added for node fields that are always empty.
 
@@ -43,7 +43,7 @@ export default class StatementParser extends ExpressionParser {
     const directiveLiteral = this.startNodeAt(expr.start, expr.loc.start);
     const directive = this.startNodeAt(stmt.start, stmt.loc.start);
 
-    const raw = this.input.slice(expr.start, expr.end);
+    const raw = this.buffer.slice(expr.start, expr.end).toString("utf8");
     const val = (directiveLiteral.value = raw.slice(1, -1)); // remove quotes
 
     this.addExtra(directiveLiteral, "raw", raw);
@@ -526,7 +526,9 @@ export default class StatementParser extends ExpressionParser {
   parseThrowStatement(node: N.ThrowStatement): N.ThrowStatement {
     this.next();
     if (
-      lineBreak.test(this.input.slice(this.state.lastTokEnd, this.state.start))
+      containsNewLine(
+        this.buffer.slice(this.state.lastTokEnd, this.state.start),
+      )
     ) {
       this.raise(this.state.lastTokEnd, "Illegal newline after throw");
     }
