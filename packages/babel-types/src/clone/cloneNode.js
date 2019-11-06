@@ -2,7 +2,7 @@ import { NODE_FIELDS } from "../definitions";
 
 const has = Function.call.bind(Object.prototype.hasOwnProperty);
 
-function cloneIfNode(obj, deep) {
+function cloneIfNode(obj, deep, withoutLoc) {
   if (
     obj &&
     typeof obj.type === "string" &&
@@ -11,24 +11,25 @@ function cloneIfNode(obj, deep) {
     obj.type !== "CommentLine" &&
     obj.type !== "CommentBlock"
   ) {
-    return cloneNode(obj, deep);
+    return cloneNode(obj, deep, withoutLoc);
   }
 
   return obj;
 }
 
-function cloneIfNodeOrArray(obj, deep) {
+function cloneIfNodeOrArray(obj, deep, withoutLoc) {
   if (Array.isArray(obj)) {
-    return obj.map(node => cloneIfNode(node, deep));
+    return obj.map(node => cloneIfNode(node, deep, withoutLoc));
   }
-  return cloneIfNode(obj, deep);
+  return cloneIfNode(obj, deep, withoutLoc);
 }
 
 /**
  * Create a clone of a `node` including only properties belonging to the node.
  * If the second parameter is `false`, cloneNode performs a shallow clone.
+ * If the third parameter is `true`, cloneNode does not copy the location property.
  */
-export default function cloneNode<T: Object>(node: T, deep: boolean = true): T {
+export default function cloneNode<T: Object>(node: T, deep: boolean = true, withoutLoc: boolean = false): T {
   if (!node) return node;
 
   const { type } = node;
@@ -60,7 +61,7 @@ export default function cloneNode<T: Object>(node: T, deep: boolean = true): T {
   }
 
   if (has(node, "loc")) {
-    newNode.loc = node.loc;
+    newNode.loc = withoutLoc ? null : node.loc;
   }
   if (has(node, "leadingComments")) {
     newNode.leadingComments = node.leadingComments;
