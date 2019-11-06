@@ -72,4 +72,26 @@ describe("cloneNode", function() {
       node.declarations[0].id.typeAnnotation,
     );
   });
+
+  it("should support shallow clones without location", function() {
+    const obj = t.identifier("foo");
+    const node = t.memberExpression(obj, t.identifier("bar"));
+    obj.loc = { start: 0, end: 0 };
+    node.loc = { start: 0, end: 0 };
+
+    const cloned = t.cloneNode(node, /* deep */ false, /* withoutLoc */ true);
+    expect(cloned).not.toHaveProperty('loc');
+    expect(cloned.object).toHaveProperty('loc');
+  });
+
+  it("should support deep clones without location", function() {
+    const obj = t.identifier("foo");
+    const node = t.memberExpression(obj, t.identifier("bar"));
+    obj.loc = { start: 0, end: 0 };
+    node.loc = { start: 0, end: 0 };
+
+    const cloned = t.cloneNode(node, /* deep */ true, /* withoutLoc */ true);
+    expect(cloned).not.toHaveProperty('loc');
+    expect(cloned.object).not.toHaveProperty('loc');
+  });
 });
