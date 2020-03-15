@@ -666,12 +666,13 @@ class BlockScoping {
 
       const paramName = param.name;
       const newParamName = scope.generateUid(param.name);
-      fn.params[i] = t.identifier(newParamName);
 
-      // TODO
       const program = scope.getProgramParent().path;
-      const [inserted] = program.pushContainer("body", fn);
-      inserted.scope.rename(paramName, newParamName);
+      const [inserted] = program.pushContainer(
+        "body",
+        t.expressionStatement(fn),
+      );
+      inserted.get("expression").scope.rename(paramName, newParamName);
       inserted.remove();
 
       state.returnStatements.forEach(returnStatement => {
