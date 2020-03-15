@@ -6,8 +6,12 @@ jestArgs=()
 
 if [ "$TEST_DEBUG" ]; then
   node="$node --inspect-brk"
+  if [ "$TEST_PORT" ]; then
+    node="$node=$TEST_PORT"
+  fi
   jestArgs+=("--runInBand")
 fi
+
 
 if [ -n "$CI" ]; then
   jestArgs+=("--maxWorkers=4")

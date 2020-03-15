@@ -26,13 +26,12 @@ export default declare((api, opts) => {
       VariableDeclaration(path) {
         const { node, parent, scope } = path;
         if (!isBlockScoped(node)) return;
-        convertBlockScopedToVar(path, null, parent, scope, true);
+        convertBlockScopedToVar(path, path.node, parent, scope, true);
 
         if (node._tdzThis) {
           const nodes = [node];
 
-          for (let i = 0; i < node.declarations.length; i++) {
-            const decl = node.declarations[i];
+          for (const decl of node.declarations) {
             const assign = t.assignmentExpression(
               "=",
               decl.id,
@@ -114,8 +113,8 @@ const buildRetCheck = template(`
 function isBlockScoped(node) {
   if (!t.isVariableDeclaration(node)) return false;
   if (node[t.BLOCK_SCOPED_SYMBOL]) return true;
-  if (node.kind !== "let" && node.kind !== "const") return false;
-  return true;
+  if (node.kind === "let" || node.kind === "const") return true;
+  return false;
 }
 
 /**
@@ -137,10 +136,6 @@ function convertBlockScopedToVar(
   scope,
   moveBindingsToParent = false,
 ) {
-  if (!node) {
-    node = path.node;
-  }
-
   // https://github.com/babel/babel/issues/255
   if (isInLoop(path) && !t.isFor(parent)) {
     for (let i = 0; i < node.declarations.length; i++) {
@@ -164,7 +159,10 @@ function convertBlockScopedToVar(
 }
 
 function isVar(node) {
-  return t.isVariableDeclaration(node, { kind: "var" }) && !isBlockScoped(node);
+  return (
+    t.isVariableDeclaration(node, { kind: "var" }) &&
+    !node[t.BLOCK_SCOPED_SYMBOL]
+  );
 }
 
 const letReferenceBlockVisitor = traverse.visitors.merge([
@@ -246,19 +244,19 @@ const loopLabelVisitor = {
 };
 
 const continuationVisitor = {
-  enter(path, state) {
-    if (path.isAssignmentExpression() || path.isUpdateExpression()) {
-      for (const name of Object.keys(path.getBindingIdentifiers())) {
+  enter(node, state) {
+    if (t.isAssignmentExpression(node) || t.isUpdateExpression(node)) {
+      for (const name of Object.keys(t.getBindingIdentifiers(node))) {
         if (
           state.outsideReferences[name] !==
-          path.scope.getBindingIdentifier(name)
+          state.scope.getBindingIdentifier(name)
         ) {
           continue;
         }
         state.reassignments[name] = true;
       }
-    } else if (path.isReturnStatement()) {
-      state.returnStatements.push(path);
+    } else if (t.isReturnStatement(node)) {
+      state.returnStatements.push(node);
     }
   },
 };
@@ -443,6 +441,8 @@ class BlockScoping {
   updateScopeInfo(wrappedInClosure) {
     const blockScope = this.blockPath.scope;
 
+    // TODO: if we're in program scope, parentScope will just be the program
+    // scope again. Probably don't need to do any of this work.
     const parentScope =
       blockScope.getFunctionParent() || blockScope.getProgramParent();
     const letRefs = this.letReferences;
@@ -650,34 +650,41 @@ class BlockScoping {
    */
 
   addContinuations(fn) {
+    const { scope } = this;
     const state = {
       reassignments: {},
       returnStatements: [],
       outsideReferences: this.outsideLetReferences,
+      scope,
     };
 
-    this.scope.traverse(fn, continuationVisitor, state);
+    t.traverseFast(fn, continuationVisitor.enter, state);
 
     for (let i = 0; i < fn.params.length; i++) {
       const param = fn.params[i];
       if (!state.reassignments[param.name]) continue;
 
       const paramName = param.name;
-      const newParamName = this.scope.generateUid(param.name);
+      const newParamName = scope.generateUid(param.name);
       fn.params[i] = t.identifier(newParamName);
 
-      this.scope.rename(paramName, newParamName, fn);
+      // TODO
+      const program = scope.getProgramParent().path;
+      const [inserted] = program.pushContainer("body", fn);
+      inserted.scope.rename(paramName, newParamName);
+      inserted.remove();
 
       state.returnStatements.forEach(returnStatement => {
-        returnStatement.insertBefore(
-          t.expressionStatement(
-            t.assignmentExpression(
-              "=",
-              t.identifier(paramName),
-              t.identifier(newParamName),
-            ),
-          ),
+        const { argument } = returnStatement;
+        const assignment = t.assignmentExpression(
+          "=",
+          t.identifier(paramName),
+          t.identifier(newParamName),
         );
+
+        returnStatement.argument = argument
+          ? t.sequenceExpression([assignment, argument])
+          : assignment;
       });
 
       // assign outer reference as it's been modified internally and needs to be retained

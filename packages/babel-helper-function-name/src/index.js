@@ -31,17 +31,26 @@ const buildGeneratorPropertyMethodAssignmentWrapper = template(`
 `);
 
 const visitor = {
-  "ReferencedIdentifier|BindingIdentifier"(path, state) {
+  enter(node, ancestors, state) {
+    if (!t.isIdentifier(node)) return;
+
+    const [parent, grandparent] = ancestors.slice(-2).reverse();
+    if (
+      !t.isReferenced(node, parent, grandparent) &&
+      !t.isBinding(node, parent, grandparent)
+    ) {
+      return;
+    }
+
     // check if this node matches our function id
-    if (path.node.name !== state.name) return;
+    if (node.name !== state.name) return;
 
     // check that we don't have a local variable declared as that removes the need
     // for the wrapper
-    const localDeclar = path.scope.getBindingIdentifier(state.name);
+    const localDeclar = state.scope.getBindingIdentifier(node.name);
     if (localDeclar !== state.outerDeclar) return;
 
     state.selfReference = true;
-    path.stop();
   },
 };
 
@@ -107,6 +116,7 @@ function visit(node, name, scope) {
     outerDeclar: scope.getBindingIdentifier(name),
     references: [],
     name: name,
+    scope,
   };
 
   // check to see if we have a local binding of the id we're setting inside of
@@ -140,7 +150,7 @@ function visit(node, name, scope) {
       // bound function id
     }
   } else if (state.outerDeclar || scope.hasGlobal(name)) {
-    scope.traverse(node, visitor, state);
+    t.traverse(node, visitor, state);
   }
 
   return state;

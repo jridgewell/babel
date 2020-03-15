@@ -368,10 +368,10 @@ export default class Scope {
     }
   }
 
-  rename(oldName: string, newName: string, block?) {
+  rename(oldName: string, newName: string, block?: Object) {
     const binding = this.getBinding(oldName);
     if (binding) {
-      newName = newName || this.generateUidIdentifier(oldName).name;
+      newName = newName || this.generateUid(oldName);
       return new Renamer(binding, oldName, newName).rename(block);
     }
   }
@@ -960,6 +960,8 @@ export default class Scope {
    */
 
   moveBindingTo(name, scope) {
+    if (scope === this) return;
+
     const info = this.getBinding(name);
     if (info) {
       info.scope.removeOwnBinding(name);

@@ -1,6 +1,7 @@
 import Binding from "../binding";
 import splitExportDeclaration from "@babel/helper-split-export-declaration";
 import * as t from "@babel/types";
+import traverse from "@babel/traverse";
 
 const renameVisitor = {
   ReferencedIdentifier({ node }, state) {
@@ -10,12 +11,7 @@ const renameVisitor = {
   },
 
   Scope(path, state) {
-    if (
-      !path.scope.bindingIdentifierEquals(
-        state.oldName,
-        state.binding.identifier,
-      )
-    ) {
+    if (path.scope.hasOwnBinding(state.oldName)) {
       path.skip();
     }
   },
@@ -118,7 +114,7 @@ export default class Renamer {
       }
     }
 
-    scope.traverse(block || scope.block, renameVisitor, this);
+    traverse(block || scope.block, renameVisitor, scope, this);
 
     if (!block) {
       scope.removeOwnBinding(oldName);

@@ -61,6 +61,26 @@ export function visit(): boolean {
     return false;
   }
 
+  for (let current = this; current; ) {
+    const { parentPath, container, listKey } = current;
+    // The Program node doesn't have a parentPath.
+    if (!parentPath) break;
+
+    // Node may be null due to a removal.
+    const { node } = parentPath;
+    const currentContainer = listKey ? node?.[listKey] : node;
+
+    // If the parentPath's node is replaced, the child's container will not be
+    // updated to match. That lets us know what the current traversal needs to
+    // be skipped, since we may now be detached from the AST. We'll descend in
+    // again if necessary.
+    if (container !== currentContainer) {
+      debugger;
+      return false;
+    }
+    current = parentPath;
+  }
+
   if (this.isBlacklisted()) {
     return false;
   }
