@@ -26,12 +26,13 @@ export default declare((api, opts) => {
       VariableDeclaration(path) {
         const { node, parent, scope } = path;
         if (!isBlockScoped(node)) return;
-        convertBlockScopedToVar(path, path.node, parent, scope, true);
+        convertBlockScopedToVar(path, node, parent, scope, true);
 
         if (node._tdzThis) {
           const nodes = [node];
 
-          for (const decl of node.declarations) {
+          for (let i = 0; i < node.declarations.length; i++) {
+            const decl = node.declarations[i];
             const assign = t.assignmentExpression(
               "=",
               decl.id,
@@ -244,20 +245,8 @@ const loopLabelVisitor = {
 };
 
 const continuationVisitor = {
-  enter(node, state) {
-    if (t.isAssignmentExpression(node) || t.isUpdateExpression(node)) {
-      for (const name of Object.keys(t.getBindingIdentifiers(node))) {
-        if (
-          state.outsideReferences[name] !==
-          state.scope.getBindingIdentifier(name)
-        ) {
-          continue;
-        }
-        state.reassignments[name] = true;
-      }
-    } else if (t.isReturnStatement(node)) {
-      state.returnStatements.push(node);
-    }
+  ReturnStatement(path, state) {
+    state.returnStatements.push(path);
   },
 };
 
@@ -441,8 +430,6 @@ class BlockScoping {
   updateScopeInfo(wrappedInClosure) {
     const blockScope = this.blockPath.scope;
 
-    // TODO: if we're in program scope, parentScope will just be the program
-    // scope again. Probably don't need to do any of this work.
     const parentScope =
       blockScope.getFunctionParent() || blockScope.getProgramParent();
     const letRefs = this.letReferences;
@@ -651,41 +638,33 @@ class BlockScoping {
 
   addContinuations(fn) {
     const { scope } = this;
-    const state = {
-      reassignments: {},
-      returnStatements: [],
-      outsideReferences: this.outsideLetReferences,
-      scope,
-    };
 
-    t.traverseFast(fn, continuationVisitor.enter, state);
+    const program = scope.getProgramParent().path;
+    const [fnPath] = program.pushContainer("body", fn);
+    const fnScope = fnPath.scope;
+
+    const state = { returnStatements: [] };
+    fnPath.traverse(continuationVisitor, state);
 
     for (let i = 0; i < fn.params.length; i++) {
       const param = fn.params[i];
-      if (!state.reassignments[param.name]) continue;
-
       const paramName = param.name;
-      const newParamName = scope.generateUid(param.name);
 
-      const program = scope.getProgramParent().path;
-      const [inserted] = program.pushContainer(
-        "body",
-        t.expressionStatement(fn),
-      );
-      inserted.get("expression").scope.rename(paramName, newParamName);
-      inserted.remove();
+      if (fnScope.bindings[paramName].constant) continue;
+
+      const newParamName = scope.generateUid(paramName);
+      fnPath.scope.rename(paramName, newParamName);
 
       state.returnStatements.forEach(returnStatement => {
-        const { argument } = returnStatement;
-        const assignment = t.assignmentExpression(
-          "=",
-          t.identifier(paramName),
-          t.identifier(newParamName),
+        returnStatement.insertBefore(
+          t.expressionStatement(
+            t.assignmentExpression(
+              "=",
+              t.identifier(paramName),
+              t.identifier(newParamName),
+            ),
+          ),
         );
-
-        returnStatement.argument = argument
-          ? t.sequenceExpression([assignment, argument])
-          : assignment;
       });
 
       // assign outer reference as it's been modified internally and needs to be retained
@@ -699,6 +678,8 @@ class BlockScoping {
         ),
       );
     }
+
+    fnPath.remove();
   }
 
   getLetReferences() {
